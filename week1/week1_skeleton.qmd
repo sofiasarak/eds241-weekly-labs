@@ -1,0 +1,291 @@
+---
+title: "Lab 1"
+subtitle: "Creating tidy tables"
+description: "Friday January 9^th^, 2026"
+format: html
+---
+
+## Activity 1: Creating Tidy Tables 
+
+There are many different ways to create tidy tables in R. You might be familiar with the `kable` function from `{knitr}` that creates tables for rectangular data. Kable tables don't have a ton of flexibility, but are great at producing clean, simple tables. As we move into creating tables for the many different statistical models we will learn in this course, we will need to move beyond a simple kable table. That is where `{gt}` comes in!
+A `{gt}` table allows for the following structure, making it ideal for displaying different statistical outcomes. 
+
+```{r, echo=FALSE}
+knitr::include_graphics(here::here("week1", "images", "gt_table.svg"))
+```
+
+We are going to use our class survey data to create some tables! 
+```{r}
+#| warning: false
+#| message: false
+
+# Load packages
+library(tidyverse)
+library(gtsummary)
+library(gt)
+library(janitor)
+
+
+
+# Read in class survey data and split into two random groups
+class_data <- read_csv("https://raw.github.com/garberadamc/W26-Policy-Eval/main/course-materials/labs/data/W26_class_survey.csv") %>% 
+  mutate(random_groups = sample(rep(c("control", "treatment"), each = n()/2)))
+
+```
+
+
+Let's create a base table that we will use with both `kable` and `gt`. 
+
+
+```{r}
+# Create the base summary object
+balance_summary <- class_data %>% 
+  gtsummary::tbl_summary(                   # gtsummary SPECIFICALLY makes statistical tables
+    # Select how we want to group columns
+    by = random_groups,
+    # Variables to include
+    include = c(height, pets, dominant_hand, fav_number),
+    # Display the mean and standard deviation
+    statistic = list(all_continuous() ~ "{mean} ({sd})")
+  ) %>% 
+  # Add p value
+  add_p()
+
+balance_summary
+
+```
+
+
+
+Now lets output our `balance_summary` with a kable table! 
+
+```{r}
+balance_summary %>% 
+  as_kable_extra(caption = "Class Survey Balance Table") %>% 
+  kableExtra::kable_styling(
+    bootstrap_options = c("striped", "condensed", "hover")
+  )
+```
+
+It looks fine... But we can make it a lot nicer with `{gt}`! 
+
+```{r}
+# Convert our balance summary table to a gt table
+balance_summary %>% 
+  as_gt() %>% 
+  
+  # Add a Title and Subtitle
+ tab_header(
+   title = "Class Survey Balance Table",
+   subtitle = "Using Randomly Assigned Groups"
+ ) %>% 
+  
+  # Add a Spanner to group the data columns
+tab_spanner(
+  label = "Randomized Groups", 
+  columns = c(stat_1, stat_2)     # Specifies spanner to span just the two statistics; could specify everything()
+) %>% 
+  
+  # Change column labels
+cols_label(
+  label = "Variable",
+  p.value = "P-Value"            # Could change control and treatment labels using "stat_1" and "stat_2"
+) %>% 
+  
+  # Add a source note at the bottom
+tab_source_note(
+  source_note = "Note: Data from the Winter 2026 Class Survey"
+)
+```
+
+The `{gt}` table looks a lot cleaner! Let's move on with creating some more `{gt}` tables! 
+
+We are going to use data from the [Moland et al. 2013](https://drive.google.com/file/d/1TjKa7gH9YVCSpG4HeWb7LFFbsqoSEYeQ/view) study on Lobster MPAS. 
+
+The data we will be working with has the following variables: 
+
+| Variable | Data Type | Descriptions |
+|----------|-----------|--------------|
+| year | Numeric (5-levels) | Years measured from 2006 to 2010 |
+| region | Character (3-levels) | bol= Bolærne , kve = Kvernskjær , flo = Flødevigen |
+| treat | Character (2-levels) | mpa = treatment , con = control |
+| cpue | Numeric | Catch per unit effort |
+
+Let's read in our data to get started! 
+
+```{r}
+#| warning: false
+#| message: false
+lobsters <- read_csv("https://raw.github.com/garberadamc/Lab2-EDS241-Moland13/main/data/moland13_lobsters.csv")
+```
+
+We will start with creating a table for the total CPUE for each year and region. 
+
+To create a table with a column for each region, we need to untidy our data! We will do so by pivoting our data into wide format, with a column for each region, and the CPU for each year in that specific region. 
+
+This will be a 2 way table, since we are displaying data for two variables.
+
+
+```{r}
+tbl_2way <- lobsters %>% 
+  
+  # Calculate total cpue for each year and region
+  group_by(year, region) %>% 
+  summarize(
+    total_cpue = sum(cpue, na.rm = TRUE),
+    .groups = "drop" # sam as ungrouping
+  ) %>% 
+  
+  # Pivot to create a column for each region
+  pivot_wider(
+    names_from = region,
+    values_from = total_cpue
+  ) %>% 
+  
+  # Put in ascending order
+  
+  arrange(year) %>% 
+  
+  # Add a row for total cpue
+  adorn_totals("row")          # "row" does it by row, "col" by column
+```
+
+Time to use `{gt}` to make this into a nice looking table!!
+
+```{r}
+tbl_2way %>% 
+  gt(rowname_col = "year") %>%          # coming from a data frame, use gt(); from a gt summary table, use as_gt()
+  tab_header(
+    title = "European Lobster Catch by Region and Year",
+    subtitle = "Total Catch Per Unit Effort (CPUE) by year and region"
+  ) %>% 
+  cols_label(
+    bol = "Bolærne",
+    flo = "Kvernskjær",
+    kve = "Flødevigen") %>% 
+  tab_source_note(
+    "Source: Moland et al., 2013"
+  )
+
+```
+
+Let's now add our `treat` variable into the table, so we can see how lobster catch varied within our control and MPA groups. This will be a 3 way table! 
+
+```{r}
+tbl_3way <- lobsters %>% 
+  # Calculate total cpue for each year/region/trt group
+  group_by(year, region, treat) %>% 
+  summarize(total_cpue = sum(cpue, na.rm = TRUE),
+            .groups = "drop") %>% 
+  # Pivot to create column for each trt/control group within each region
+  pivot_wider(names_from = c(region, treat), values_from = total_cpue) %>% 
+  
+  # Arrange by year
+  arrange(year)
+```
+
+Time to use `{gt}` to make this into a nice looking table!!
+
+```{r}
+fancy_table <- tbl_3way %>% 
+  
+  # Tell gt that our row name column comes from "year" in our original data frame
+  gt(rowname_col = "year") %>%          # coming from a data frame, use gt(); from a gt summary table, use as_gt()
+  
+  # Add table title and subtitle
+  tab_header(
+    title = "European Lobster Catch by Region, Year, and Treatment",
+    subtitle = "Total Catch Per Unit Effort (CPUE)"
+  ) %>% 
+ 
+  # Create region name spanner for both control and treatment columns
+  tab_spanner(
+    label = "Bolærne",
+    columns = c("bol_con", "bol_mpa")
+  ) %>%
+  tab_spanner(
+    label = "Flødevigen",
+    columns = c("flo_con", "flo_mpa")
+  ) %>%
+  tab_spanner(
+    label = "Kvernskjær",
+    columns = c("kve_con", "kve_mpa")
+  ) %>% 
+  
+  # Change individual column names to be cleaner
+  cols_label(
+    bol_con = "Control",
+    bol_mpa = "Treatment",
+    flo_con = "Control",
+    flo_mpa = "Treatment",
+    kve_con = "Control",
+    kve_mpa = "Treatment") %>% 
+  
+  # Add source note
+  tab_source_note(
+    "Source: Moland et al., 2013"
+  )
+
+```
+
+#### Time to get REALLY fancy! 
+
+We can add plots within our table as well! While maybe not completely necessary in this instance, it can be a helpful tool to have! 
+
+```{r}
+table_w_plots <- lobsters %>% 
+  
+  # Calculate total cpue for each year
+  group_by(year) %>% 
+  summarize(
+    total_cpue = sum(cpue, na.rm = TRUE),
+    dist_cpue = list(cpue), # store all individual cpue values as a list for each year
+    .groups = "drop"
+  ) %>% 
+  arrange(year) %>% 
+  
+  # Create gt table
+  gt() %>% 
+  tab_header(title = "European Lobster Catch Totals and Distribution (2006 - 2010)",
+             subtitle = "Total Catch per Unit Effort (CPUE)") %>% 
+  cols_label(
+    year = "Year",
+    total_cpue = "Total CPUE",
+    dist_cpue = "Density CPUE"
+  ) %>% 
+  
+  # Add in-line density plots
+  gtExtras::gt_plt_dist(
+    dist_cpue,
+    type = "density",
+    line_color = "blue",
+    fill = "red"
+  )
+
+table_w_plots
+```
+
+
+```{r}
+#install.packages("praise")
+#install.packages("cowsay")
+#install.packages("beepr")
+library(praise)
+library(cowsay)
+library(beepr)
+say("All done making some beautiful tables! :) ", "whale"); beep(3)  
+
+```
+
+
+
+
+## Activity 2: Buntaine Policy Study Reading Comprehension Check 
+
+With your group, answer the following questions from the Buntaine article. 
+
+1. What prompted this study? 
+2. How were the treatment and control groups formed? 
+3. Was the social competition strategy effective? 
+
+
