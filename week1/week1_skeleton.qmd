@@ -47,9 +47,9 @@ balance_summary <- class_data %>%
     include = c(height, pets, dominant_hand, fav_number),
     # Display the mean and standard deviation
     statistic = list(all_continuous() ~ "{mean} ({sd})")
-  ) %>% 
+  )  #%>% 
   # Add p value
-  add_p()
+  #add_p()
 
 balance_summary
 
@@ -288,4 +288,23 @@ With your group, answer the following questions from the Buntaine article.
 2. How were the treatment and control groups formed? 
 3. Was the social competition strategy effective? 
 
+
+## HW 1 backup code
+```{r}
+# NOTE TO GRADER: the `gtsummary::tbl_summary()` method no longer works for my version of R/the gt summary package. Originally, I had successfully used the code below to make my summary table, but after revisiting this assignment at a later date, I kept getting (truly unfixable) errors regarding the way I was specifying the `statistic` argument. 
+
+# After some research online, it seems as though the problem comes from the package itself -- perhaps it had updated between the first and second time I opened this assignment. I have included my original code below to verify that I do know how to use this method, but I had to workaround the issue and use group_by() and summarize() to get a similar result.
+
+# Optimize df for analysis
+spiny_counts <- spiny_counts %>% 
+  drop_na(counts, mean_size_mm) %>% 
+  mutate(counts = as.numeric(counts))
+
+# Create initial summary table
+lobster_summary <- spiny_counts %>% 
+  group_by(mpa) %>% 
+  summarize(counts = round(mean(counts, na.rm = TRUE), 2),
+            size_mm = round(mean(mean_size_mm, na.rm = TRUE), 2)) %>% 
+  gt() # Save as gt object
+```
 
